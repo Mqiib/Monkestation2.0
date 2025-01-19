@@ -108,8 +108,8 @@ There are several things that need to be remembered:
 				var/species_icon_file = dna.species.generate_custom_worn_icon(LOADOUT_ITEM_UNIFORM, uniform)
 				if(species_icon_file)
 					icon_file = species_icon_file
-		//Female sprites have lower priority than digitigrade sprites
-		else if(dna.species.visual_gender & dna.species.sexes && (dna.species.bodytype & BODYTYPE_HUMANOID) && physique == FEMALE && !(uniform.female_sprite_flags & NO_FEMALE_UNIFORM)) //Agggggggghhhhh
+		//Female sprites have lower priority than digitigrade sprites - MONKESTATION EDIT - ALL WOMEN DESERVE REPRESENTATION
+		if(dna.species.visual_gender & dna.species.sexes && (dna.species.bodytype & BODYTYPE_HUMANOID) && physique == FEMALE && !(uniform.female_sprite_flags & NO_FEMALE_UNIFORM)) //Agggggggghhhhh
 			woman = TRUE
 
 		if(!icon_exists(icon_file, RESOLVE_ICON_STATE(uniform)))

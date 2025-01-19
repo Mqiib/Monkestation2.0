@@ -495,7 +495,15 @@ BLIND     // can't see anything
 
 /proc/generate_female_clothing(index, t_color, icon, type, flat = FALSE)	//MONKESTATION EDIT - Dimorphic lizards
 	var/icon/female_clothing_icon = icon("icon"=icon, "icon_state"=t_color)
-	var/female_icon_state = "female[(type == FEMALE_UNIFORM_FULL) ? "_full" : ((!type || type & FEMALE_UNIFORM_TOP_ONLY) ? "_top" : "")][((type & FEMALE_UNIFORM_NO_BREASTS) || flat) ? "_no_breasts" : ""]"	//MONKESTATION EDIT - Dimorphic lizards
+	var/female_icon_state = "female"
+
+	if(type & FEMALE_UNIFORM_FULL)	//MONKESTATION EDIT - Dimorphic lizards
+		female_icon_state += "_full"
+	else if((!type || (type & FEMALE_UNIFORM_TOP_ONLY)))
+		female_icon_state += "_top"
+	if(type & FEMALE_UNIFORM_NO_BREASTS || flat)
+		female_icon_state += "_no_breasts"
+
 	var/icon/female_cropping_mask = icon("icon" = 'icons/mob/clothing/under/masking_helpers.dmi', "icon_state" = female_icon_state)
 	female_clothing_icon.Blend(female_cropping_mask, ICON_MULTIPLY)
 	female_clothing_icon = fcopy_rsc(female_clothing_icon)
