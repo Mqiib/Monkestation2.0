@@ -497,7 +497,7 @@ BLIND     // can't see anything
 	var/icon/female_clothing_icon = icon("icon"=icon, "icon_state"=t_color)
 	var/female_icon_state = "female"
 
-	if(type & FEMALE_UNIFORM_FULL)	//MONKESTATION EDIT - Dimorphic lizards
+	if(type & FEMALE_UNIFORM_FULL)	//MONKESTATION EDIT - Dimorphic lizards and splitting up a crazy long single line to be able to read it
 		female_icon_state += "_full"
 	else if((!type || (type & FEMALE_UNIFORM_TOP_ONLY)))
 		female_icon_state += "_top"
