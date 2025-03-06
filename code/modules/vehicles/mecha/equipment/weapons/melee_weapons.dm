@@ -5,7 +5,7 @@
 	range = MECHA_MELEE|MECHA_RANGED	//so we can do stuff at range and in melee
 	destroy_sound = 'sound/mecha/weapdestr.ogg'
 	mech_flags = EXOSUIT_MODULE_MELEE
-	melee_override = TRUE
+	equipment_flags = MELEE_OVERRIDE
 	obj_flags = UNIQUE_RENAME // because it's COOL
 	var/restricted = TRUE //for our special hugbox exofabs
 	///	If we have a longer range weapon, such as a spear or whatever capable of hitting people further away, this is how much extra range it has
@@ -13,7 +13,7 @@
 	///	Attack speed modifier for a weapon. Big weapons will have a longer delay between attacks, while smaller ones will be faster
 	var/attack_speed_modifier = 1
 	///	Attack sound for the weapon
-	var/attack_sound = 'sound/weapons/mechasword.ogg'
+	var/attack_sound = 'monkestation/sound/weapons/mechasword.ogg'
 	//Attack types - Note that at least one of these must be true otherwise it'll only have passive effects (if any)
 	//By default we assume we're using a small weapon with only a special single-target attack
     ///	If the weapon has an AOE attack
@@ -50,18 +50,18 @@
 	var/cleave_effect = /obj/effect/temp_visual/dir_setting/firing_effect/sweep_attack
 
 //Melee weapon attacks are a little different in that they'll override the standard melee attack
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/action(atom/target, mob/living/user, params)
+/obj/item/mecha_parts/mecha_equipment/melee_weapon/action(mob/source, atom/target, list/modifiers)
 	var/turf/curloc = get_turf(chassis)
 	var/turf/targloc = get_turf(target)
 	if (!targloc || !istype(targloc) || !curloc)
 		return 0
 	if (targloc == curloc)
 		return 0
-	if(target == targloc && (user.istate & ISTATE_HARM) && cleave)	//If we are targetting a location, not an object or mob, and we're not in a passive stance
+	if(target == targloc && (source.istate & ISTATE_HARM) && cleave)	//If we are targetting a location, not an object or mob, and we're not in a passive stance
 		var/attack_dir = NONE
 		if(chassis.mecha_flags & OMNIDIRECTIONAL_ATTACKS)
-			if(user.client) //try to get the precise angle to the user's mouse rather than just the tile clicked on
-				attack_dir = angle2dir(mouse_angle_from_client(user.client))
+			if(source.client) //try to get the precise angle to the source's mouse rather than just the tile clicked on
+				attack_dir = angle2dir(mouse_angle_from_client(source.client))
 			if(!attack_dir) //if no fancy targeting has happened, default to something alright
 				attack_dir = angle2dir(get_angle(chassis, target))
 		else
@@ -221,14 +221,14 @@
 
 		if(living_target.stat == DEAD && !precise_no_mobdamage && (LAZYLEN(living_target.butcher_results) || LAZYLEN(living_target.guaranteed_butcher_results)))
 			var/datum/component/butchering/butchering = src.GetComponent(/datum/component/butchering)
-			if(!do_after(chassis.weapondude, butchering.speed, living_target))
+			if(!do_after(weapondude, butchering.speed, living_target))
 				return
-			butchering.Butcher(chassis, living_target)
+			butchering.startButcher(src, living_target, chassis.return_controllers_with_flag(VEHICLE_CONTROL_EQUIPMENT)[1])
 			return
 
 		if(iscarbon(living_target) && !precise_no_mobdamage)
 			var/mob/living/carbon/C = living_target
-			var/obj/item/bodypart/body_part = living_target.get_bodypart(chassis.weapondude? chassis.weapondude.zone_selected : BODY_ZONE_CHEST)
+			var/obj/item/bodypart/body_part = living_target.get_bodypart(weapondude? weapondude.zone_selected : BODY_ZONE_CHEST)
 			var/armor_block = C.run_armor_check(body_part, MELEE, armour_penetration = base_armor_piercing * 2)	//more AP for precision attacks
 			C.apply_damage(max(chassis.force + precise_weapon_damage, minimum_damage), dam_type, body_part, armor_block, sharpness = attack_sharpness, wound_bonus = sword_wound_bonus)
 		else if(!precise_no_mobdamage)
@@ -417,18 +417,15 @@
 		addtimer(CALLBACK(src, PROC_REF(set_ready_state), 1, chassis.melee_cooldown * check_eva() * 0.5) )	//half cooldown on a failed lunge attack
 		return
 
-	if(isliving(target))
-		var/mob/living/living_target = target
-		var/mob/living/weapondude = chassis.return_controllers_with_flag(VEHICLE_CONTROL_EQUIPMENT)[1]
-
 	for(var/i in 1 to stab_number)
 		special_hit(target)
 		if(isliving(target))
 			var/mob/living/L = target
+			var/mob/living/weapondude = chassis.return_controllers_with_flag(VEHICLE_CONTROL_EQUIPMENT)[1]
 
 			if(iscarbon(L) && !precise_no_mobdamage)
 				var/mob/living/carbon/C = L
-				var/obj/item/bodypart/body_part = C.get_bodypart(chassis.weapondude? chassis.weapondude.zone_selected : BODY_ZONE_CHEST)
+				var/obj/item/bodypart/body_part = C.get_bodypart(weapondude ? weapondude.zone_selected : BODY_ZONE_CHEST)
 				if(i > 1)
 					body_part = pick(C.bodyparts)	//If it's not the first strike we pick a random one, mostly to reduce the chances of instant dismembering
 				var/armor_block = C.run_armor_check(body_part, MELEE, armour_penetration = base_armor_piercing * 2)	//more AP for precision attacks
@@ -462,7 +459,7 @@
 	if(isturf(target))	//No free moving, you gotta stab something
 		return
 	step_towards(src.chassis, target)
-	next_lunge = world.time + base_lunge_cd * (chassis.melee_cooldown * check_eva())	//If we can attack faster we can lunge faster too
+	next_lunge = world.time + base_lunge_cd * (chassis.melee_cooldown)	//If we can attack faster we can lunge faster too
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/rapier/razerfang
 	name = "\improper GAT-98 \"Razerfang\" Dual Daggers"
@@ -478,7 +475,7 @@
 	precise_weapon_damage = -25	//Tiny dagger
 	minimum_damage = 10			//So we don't do negative damage
 	extended_range = 1			//So we can jump at people
-	attack_sound = 'sound/weapons/sword2.ogg'
+	attack_sound = 'monkestation/sound/weapons/sword2.ogg'
 	sword_wound_bonus = 10		//Stabby
 	stab_number = 2				//Stabby stabby
 	base_lunge_cd = 5			//Cooldown for lunge (in seconds because math)
@@ -498,41 +495,6 @@
 	if(..() && iscarbon(target))
 		next_venom = world.time + venom_cd	//do this here so that we only reset the cooldown after a full attack on a carbon
 
-
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/kinetic_crusher
-	name = "exosuit kinetic crusher"
-	desc = "A version of the kinetic crusher designed for exosuits."
-	icon_state = "mecha_crusher"
-	mech_flags = EXOSUIT_MODULE_WORKING
-	weapon_damage = 10
-	var/obj/item/kinetic_crusher/exosuit/crusher
-
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/kinetic_crusher/Initialize(mapload)
-	. = ..()
-	crusher = new(src)
-
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/kinetic_crusher/action(atom/target, mob/living/user, params)
-	var/list/modifiers = params2list(params)
-	if(modifiers[RIGHT_CLICK])
-		crusher.fire_destabilizer(target, user, params)
-		return FALSE
-	if(chassis.Adjacent(target) && istype(target, /obj/item/crusher_trophy))
-		var/obj/item/crusher_trophy/trophy = target
-		trophy.add_to(crusher, user)
-		return FALSE
-	return ..()
-
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/kinetic_crusher/special_hit(atom/target)
-	if(!ismob(target))
-		return
-	crusher.detonate_mark(target, chassis.return_controllers_with_flag(VEHICLE_CONTROL_EQUIPMENT)[1])
-
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/kinetic_crusher/Destroy()
-	for(var/obj/item/crusher_trophy/trophy as anything in crusher.trophies) // get your trophies back if the equipment is destroyed
-		trophy.remove_from(crusher, null)
-	qdel(crusher)
-	return ..()
-
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/scythe
 	name = "hydraulic scythe"
 	desc = "A large cutting tool for removing infestations of expansionist plants."
@@ -541,7 +503,7 @@
 	minimum_damage = 5
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/scythe/special_hit(atom/target)
-	if(istype(target, /mob/living/simple_animal/hostile/venus_human_trap))
+	if(istype(target, /mob/living/basic/venus_human_trap))
 		var/mob/living/dead_plant = target
 		dead_plant.take_bodypart_damage(chassis.force + weapon_damage)
 	else if(istype(target, /obj/structure/spacevine))
@@ -562,10 +524,10 @@
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/rocket_fist/precise_attack(atom/target)
 	target.mech_melee_attack(chassis, chassis.force + weapon_damage, FALSE)	//DONT SET THIS TO TRUE
 
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/rocket_fist/on_select()
+/obj/item/mecha_parts/mecha_equipment/melee_weapon/rocket_fist/on_attach()
 	chassis.melee_cooldown *= 0.8	//PUNCH FASTER
 
-/obj/item/mecha_parts/mecha_equipment/melee_weapon/rocket_fist/on_deselect()
+/obj/item/mecha_parts/mecha_equipment/melee_weapon/rocket_fist/on_attach()
 	chassis.melee_cooldown /= 0.8
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/spear
@@ -596,7 +558,7 @@
 
 		if(iscarbon(L))
 			var/mob/living/carbon/C = L
-			var/obj/item/bodypart/body_part = L.get_bodypart(penetrated ? BODY_ZONE_CHEST : chassis.weapondude ? chassis.weapondude.zone_selected : BODY_ZONE_CHEST)
+			var/obj/item/bodypart/body_part = L.get_bodypart(penetrated ? BODY_ZONE_CHEST : weapondude ? weapondude.zone_selected : BODY_ZONE_CHEST)
 			var/armor_block = C.run_armor_check(body_part, MELEE, armour_penetration = base_armor_piercing)
 			C.apply_damage(max(chassis.force + precise_weapon_damage, minimum_damage), dam_type, body_part, armor_block, sharpness = attack_sharpness)
 		else
@@ -621,10 +583,10 @@
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/spear/special_hit(atom/target)	//Pierces mechs and hits the pilot
 	if(ismecha(target))
 		var/obj/vehicle/sealed/mecha/M = target
-		for(var/mob/living/human/kebabbed in M.occupants)
+		for(var/mob/living/carbon/human/kebabbed in M.occupants)
 			if(ishuman(kebabbed))
 				precise_attack(kebabbed, TRUE)
-				H.visible_message(span_danger("[chassis.name] stabs [kebabbed] with [src]!"), \
+				kebabbed.visible_message(span_danger("[chassis.name] stabs [kebabbed] with [src]!"), \
 					span_userdanger("[chassis.name] penetrates your suits armor with [src]!"))
 				chassis.log_message("Hit [kebabbed] with [src.name] (precise attack).", LOG_MECHA)
 
@@ -642,7 +604,6 @@
 	harmful = FALSE
 	weapon_damage = 0 // no damage
 	structure_damage_mult = 0 // don't break stuff while trying to clean
-	equip_actions = list(/datum/action/innate/mecha/equipment/sweeping)
 	var/auto_sweep = TRUE
 
 /datum/action/innate/mecha/equipment/sweeping
@@ -657,14 +618,16 @@
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/attach(obj/vehicle/sealed/mecha/M)
 	. = ..()
+	chassis.initialize_controller_action_type(/datum/action/innate/mecha/equipment/sweeping, VEHICLE_CONTROL_EQUIPMENT)
 	RegisterSignal(M, COMSIG_MOVABLE_PRE_MOVE, PROC_REF(on_pre_move))
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/detach(atom/moveto)
 	UnregisterSignal(chassis, COMSIG_MOVABLE_PRE_MOVE)
+	chassis.destroy_controller_action_type(/datum/action/innate/mecha/equipment/sweeping, VEHICLE_CONTROL_EQUIPMENT)
 	return ..()
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/proc/on_pre_move(obj/vehicle/sealed/mecha/mech, atom/newloc)
-	if(mech.equipment_disabled || HAS_TRAIT(mech, TRAIT_MECH_DISABLED))
+	if(mech.equipment_disabled)
 		return
 	if(!auto_sweep)
 		return
@@ -683,7 +646,7 @@
 	for(var/atom/movable/moved_atom in newloc)
 		if(istype(moved_atom, /obj/effect/decal/nuclear_waste)) // sweep that nuclear waste under the rug
 			cleaned = TRUE
-			playsound(moved_atom, 'sound/effects/gib_step.ogg', 50, 1)
+			playsound(moved_atom, 'sound/effectsfootstep/gib_step.ogg', 50, 1)
 			qdel(moved_atom)
 			continue
 		if(isobserver(moved_atom))
@@ -723,10 +686,9 @@
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/flyswatter/Initialize(mapload)
 	. = ..()
 	strong_against = typecacheof(list(
-		/mob/living/simple_animal/hostile/poison/bees,
-		/mob/living/simple_animal/butterfly,
-		/mob/living/simple_animal/cockroach,
-		/mob/living/simple_animal/hostile/glockroach,
+		/mob/living/basic/bee,
+		/mob/living/basic/butterfly,
+		/mob/living/basic/cockroach,
 		/obj/item/queen_bee
 	))
 
