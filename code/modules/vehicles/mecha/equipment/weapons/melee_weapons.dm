@@ -57,7 +57,7 @@
 		return 0
 	if (targloc == curloc)
 		return 0
-	if(target == targloc && (source.istate & ISTATE_HARM) && cleave)	//If we are targetting a location, not an object or mob, and we're not in a passive stance
+	if(target == targloc  && cleave)	//If we are targetting a location and not an object or mob
 		var/attack_dir = NONE
 		if(chassis.mecha_flags & OMNIDIRECTIONAL_ATTACKS)
 			if(source.client) //try to get the precise angle to the source's mouse rather than just the tile clicked on
@@ -77,7 +77,9 @@
 	else	//Failure to sword
 		return 0
 	chassis.log_message("Attacked with [src.name], targeting [target].", LOG_MECHA)
-	TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_EQUIPMENT(type), chassis.melee_cooldown * attack_speed_modifier)//Cooldown is on the MECH so people dont bypass it by switching equipment
+	to_chat(world, span_warning("Timer set from [world.time] with duration [chassis.melee_cooldown * attack_speed_modifier]"))
+	TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_MELEE_ATTACK, chassis.melee_cooldown * attack_speed_modifier)//Cooldown is on the MECH so people dont bypass it by switching equipment
+	TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_EQUIPMENT(type), chassis.melee_cooldown * attack_speed_modifier)
 	SEND_SIGNAL(source, COMSIG_MOB_USED_MECH_EQUIPMENT, chassis)
 	chassis.use_power(energy_drain)
 	return 1
@@ -143,13 +145,17 @@
 	cleave = TRUE
 	precise_attacks = TRUE
 	attack_sharpness = SHARP_EDGED
-	attack_sound = 'sound/weapons/mechasword.ogg'			//Recorded from Respawn/EA's Titanfall 2 (Ronin broadsword swing). Apparently they don't care so we're probably good
-	var/mob_strike_sound = 'sound/weapons/bladeslice.ogg'	//The sound it makes when the cleave hits a mob, different from the attack
+	attack_sound = 'monkestation/sound/weapons/mechasword.ogg'			//Recorded from Respawn/EA's Titanfall 2 (Ronin broadsword swing). Apparently they don't care so we're probably good
+	///The sound it makes when the cleave hits a mob, different from the attack
+	var/mob_strike_sound = 'sound/weapons/bladeslice.ogg'
 	harmful = TRUE											//DO NOT give to children. Or do, I'm not the police.
 	minimum_damage = 0
-	var/sword_wound_bonus = 0								//Wound bonus if it's supposed to be ouchy beyond just doing damage
-	var/precise_no_mobdamage = FALSE							//If our precise attacks have a light touch for mobs
-	var/precise_no_objdamage = FALSE							//Same but for objects/structures
+	///Wound bonus if it's supposed to be ouchy beyond just doing damag
+	var/sword_wound_bonus = 0
+	///If our precise attacks have a light touch for mob
+	var/precise_no_mobdamage = FALSE
+	///Same as precies_no_mobdamage but for everything else
+	var/precise_no_objdamage = FALSE
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/Initialize(mapload)
 	. = ..()
@@ -202,7 +208,7 @@
 				if(!O.density && !istype(O, /obj/structure/spacevine))	//Make sure it's not an open door or something
 					continue
 				var/object_damage = max(chassis.force + weapon_damage, minimum_damage) * structure_damage_mult * (istype(A, /obj/vehicle/sealed/mecha) ? mech_damage_multiplier : 1)	//Half damage on mechs
-				O.take_damage(object_damage, dam_type, "melee", 0)
+				O.take_damage(object_damage, dam_type, MELEE, 0, get_dir(chassis, O), base_armor_piercing)
 				if(istype(O, /obj/structure/window))
 					playsound(O,'sound/effects/Glasshit.ogg', 50)	//glass bonk noise
 				else
@@ -242,7 +248,7 @@
 
 	else if(target.uses_integrity && !precise_no_objdamage)	//If the initial target is a big object, hit it even if it's not dense.
 		var/object_damage = max(chassis.force + precise_weapon_damage, minimum_damage) * structure_damage_mult * (ismecha(target) ? mech_damage_multiplier : 1)	//Half damage on mechs to prolong COOL MECH FIGHTS
-		target.take_damage(object_damage, dam_type, "melee", 0, armour_penetration = base_armor_piercing * 2)
+		target.take_damage(object_damage, dam_type, MELEE, 0, get_dir(chassis, target), base_armor_piercing * 2)
 	else
 		return
 	chassis.do_attack_animation(target, hit_effect)
@@ -263,7 +269,7 @@
 	attack_speed_modifier = 1.5 //Kinda chunky
 	mob_strike_sound = 'sound/weapons/blade1.ogg'
 	light_outer_range = 5
-	light_color = LIGHT_COLOR_RED
+	light_color = "#FF0000"
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/energy_axe/special_hit(A)
 	if(istype(A, /turf/closed/wall))		//IT BREAKS WALLS TOO
@@ -303,42 +309,34 @@
 	structure_damage_mult = 1
 	precise_weapon_damage = -25	//Mostly nonlethal
 	weapon_damage = -25
-	minimum_damage = 10
+	minimum_damage = 10			//Mostly.
 	hit_effect = ATTACK_EFFECT_BOOP	//Boop :^)
 	attack_sharpness = FALSE
 	precise_no_mobdamage = TRUE	//Light touch for targetted stuns
 	mob_strike_sound = 'sound/weapons/egloves.ogg'
 	attack_sound = 'sound/weapons/egloves.ogg'
-	var/special_hit_stamina_damage = 75	//A bit stronger than a normal baton
-	var/stunforce = 12 SECONDS	//Stuns a little harder too
+	var/stunforce = 12 SECONDS	//Stuns a little harder
+	var/stamina_damage = 100
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/batong/special_hit(atom/target)	//It's a stun baton. It stuns.
-	if(ishuman(target))
-		var/mob/living/carbon/human/H = target
-		var/obj/item/bodypart/affecting = H.get_bodypart(BODY_ZONE_CHEST)	//We're smacking them square in the chest with a giant stun stick
-		var/armor_block = H.run_armor_check(affecting, ENERGY)
-		H.apply_damage(special_hit_stamina_damage, STAMINA, BODY_ZONE_CHEST, armor_block)
-		SEND_SIGNAL(H, COMSIG_LIVING_MINOR_SHOCK)
+	if(ismob(target))
+		var/mob/living/mobtarget = target
+		var/trait_check = HAS_TRAIT(target, TRAIT_BATON_RESISTANCE)
 
-		var/current_stamina_damage = H.getStaminaLoss()
-		if(current_stamina_damage >= 90)
-			if(!H.IsParalyzed())
-				to_chat(H, span_warning("You muscles seize, making you collapse!"))
+		if(iscyborg(mobtarget))
+			mobtarget.flash_act(affect_silicon = TRUE)
+			mobtarget.Paralyze(stunforce * 0.5 * (trait_check ? 0.1 : 1))
+		else
+			if(!trait_check)
+				mobtarget.stamina.adjust(-stamina_damage)
 			else
-				H.Paralyze(stunforce)
-			H.adjust_jitter(20 SECONDS)
-			H.adjust_confusion(8 SECONDS)
-			H.apply_effect(EFFECT_STUTTER, stunforce)
-		else if(current_stamina_damage > 70)
-			H.adjust_jitter(10 SECONDS)
-			H.adjust_confusion(8 SECONDS)
-			H.apply_effect(EFFECT_STUTTER, stunforce)
-		else if(current_stamina_damage >= 20)
-			H.adjust_jitter(5 SECONDS)
-			H.apply_effect(EFFECT_STUTTER, stunforce)
+				var/stamina_to_min = (mobtarget.stamina.maximum * 0.29)
+				mobtarget.stamina.adjust_to(-stamina_damage, stamina_to_min)
+			if(!trait_check)
+				mobtarget.Knockdown(stunforce)
+		step_away(mobtarget, src)	//We push all mobs back a tad
+	return TRUE
 
-	if(isliving(target))
-		step_away(target, src)	//We push all mobs back a tad
 
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/trogdor	//TROGDOR!!!!! (But he's not a robot so I can't make the visible name that)
@@ -414,10 +412,13 @@
 	if(get_dist(chassis, target) > 1)	//First we hop forward
 		do_lunge_at(target)
 	if(get_dist(get_turf(src.chassis), get_turf(target)) > 1)	//If we weren't able to get within range we don't attack
-		addtimer(CALLBACK(src, PROC_REF(set_ready_state), 1, chassis.melee_cooldown * check_eva() * 0.5) )	//half cooldown on a failed lunge attack
+		TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_MELEE_ATTACK, chassis.melee_cooldown * attack_speed_modifier * 0.5)	//half cooldown on a failed lunge attack
+		TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_EQUIPMENT(type), chassis.melee_cooldown * attack_speed_modifier * 0.5)
 		return
 
 	for(var/i in 1 to stab_number)
+		if(!target)	//oops we broked it
+			break
 		special_hit(target)
 		if(isliving(target))
 			var/mob/living/L = target
@@ -441,12 +442,13 @@
 
 		else if(target.uses_integrity && !precise_no_objdamage)	//If the initial target is a big object, hit it even if it's not dense.
 			var/object_damage = max(chassis.force + precise_weapon_damage, minimum_damage) * structure_damage_mult * (ismecha(target) ? mech_damage_multiplier : 1)	//Nukie mech, slightly less bad at killing mechs
-			target.take_damage(object_damage, dam_type, "melee", 0, armour_penetration = base_armor_piercing * 2)
+			target.take_damage(object_damage, dam_type, MELEE, 0, null, base_armor_piercing)	//Fine, no direction for you
 		else
 			return
 		chassis.do_attack_animation(target, hit_effect)
 		playsound(chassis, attack_sound, 50, 1)
-		set_ready_state(0)	//Wait till we're done multi-stabbing before we do it again
+		TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_MELEE_ATTACK, chassis.melee_cooldown * attack_speed_modifier + 2 * (stab_number - i))	//Cheeky cooldown math, should be standard cooldown + total delay between attacks
+		TIMER_COOLDOWN_START(chassis, COOLDOWN_MECHA_EQUIPMENT(type), chassis.melee_cooldown * attack_speed_modifier + 2 * (stab_number - i))
 		if(i != stab_number)	//Only sleep between attacks
 			sleep(0.2 SECONDS)	//Slight delay
 	return TRUE
@@ -572,7 +574,7 @@
 
 	else if(target.uses_integrity)	//If the initial target is a big object, hit it even if it's not dense.
 		var/object_damage = max(chassis.force + precise_weapon_damage, minimum_damage) * structure_damage_mult * (ismecha(target) ? mech_damage_multiplier : 1)
-		target.take_damage(object_damage, dam_type, "melee", 0, armour_penetration = base_armor_piercing)
+		target.take_damage(object_damage, dam_type, MELEE, 0, get_dir(chassis, target), base_armor_piercing)
 		if(ismecha(target))
 			special_hit(target)
 	else
@@ -611,10 +613,13 @@
 	button_icon_state = "sweep_on"
 
 /datum/action/innate/mecha/equipment/sweeping/Activate()
-	var/obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/mop = equipment
-	mop.auto_sweep = !mop.auto_sweep
-	button_icon_state = "sweep_[mop.auto_sweep ? "on" : "off"]"
-	build_all_button_icons()
+	var/obj/vehicle/sealed/mecha/chassis = owner.loc	//This will definitely work
+	for(var/equipment in chassis.flat_equipment)
+		if(istype(equipment, /obj/item/mecha_parts/mecha_equipment/melee_weapon/mop))
+			var/obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/mop = equipment
+			mop.auto_sweep = !mop.auto_sweep
+			button_icon_state = "sweep_[mop.auto_sweep ? "on" : "off"]"
+			build_all_button_icons()
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/mop/attach(obj/vehicle/sealed/mecha/M)
 	. = ..()
@@ -646,7 +651,7 @@
 	for(var/atom/movable/moved_atom in newloc)
 		if(istype(moved_atom, /obj/effect/decal/nuclear_waste)) // sweep that nuclear waste under the rug
 			cleaned = TRUE
-			playsound(moved_atom, 'sound/effectsfootstep/gib_step.ogg', 50, 1)
+			playsound(moved_atom, 'sound/effects/footstep/gib_step.ogg', 50, 1)
 			qdel(moved_atom)
 			continue
 		if(isobserver(moved_atom))
