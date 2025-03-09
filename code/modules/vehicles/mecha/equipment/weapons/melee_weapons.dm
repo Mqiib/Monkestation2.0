@@ -409,6 +409,7 @@
 	var/base_lunge_cd = 1		//Cooldown for lunge (in seconds because math)
 
 /obj/item/mecha_parts/mecha_equipment/melee_weapon/sword/rapier/precise_attack(atom/target)
+	//Lunge stuff
 	if(get_dist(chassis, target) > 1)	//First we hop forward
 		do_lunge_at(target)
 	if(get_dist(get_turf(src.chassis), get_turf(target)) > 1)	//If we weren't able to get within range we don't attack
